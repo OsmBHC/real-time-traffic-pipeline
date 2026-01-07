@@ -1,0 +1,191 @@
+services:
+  # ==================== KAFKA ====================
+  broker:
+    image: apache/kafka:latest
+    container_name: broker
+    hostname: broker
+    ports:
+      - "9092:9092"
+      - "9094:9094"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:9094
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://broker:9092,EXTERNAL://localhost:9094
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@broker:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_NUM_PARTITIONS: 3
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-broker-api-versions.sh --bootstrap-server localhost:9092 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - smart-city-network
+
+  # ==================== HADOOP HDFS ====================
+  namenode:
+    image: apache/hadoop:3.3.6
+    container_name: namenode
+    hostname: namenode
+    command: ["hdfs", "namenode"]
+    ports:
+      - "9870:9870"
+      - "8020:8020"
+    environment:
+      ENSURE_NAMENODE_DIR: "/tmp/hadoop-root/dfs/name"
+      CORE-SITE.XML_fs.defaultFS: "hdfs://namenode:8020"
+      HDFS-SITE.XML_dfs.replication: "1"
+      HDFS-SITE.XML_dfs.permissions.enabled: "false"
+    volumes:
+      - ./data:/data
+    networks:
+      - smart-city-network
+
+  datanode:
+    image: apache/hadoop:3.3.6
+    container_name: datanode
+    hostname: localhost
+    command: ["hdfs", "datanode"]
+    ports:
+      - "9864:9864"
+    environment:
+      CORE-SITE.XML_fs.defaultFS: "hdfs://namenode:8020"
+    depends_on:
+      - namenode
+    networks:
+      - smart-city-network
+
+  # ==================== SPARK ====================
+  spark-master:
+    image: spark:latest
+    container_name: spark-master
+    hostname: spark-master
+    command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.master.Master"]
+    ports:
+      - "7077:7077"
+      - "8080:8080"
+    volumes:
+      - ./spark:/opt/spark-jobs
+      - ./data:/data
+    depends_on:
+      - namenode
+    networks:
+      - smart-city-network
+
+  spark-worker:
+    image: spark:latest
+    container_name: spark-worker
+    command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.worker.Worker", "spark://spark-master:7077"]
+    environment:
+      SPARK_WORKER_CORES: 2
+      SPARK_WORKER_MEMORY: 2G
+    volumes:
+      - ./spark:/opt/spark-jobs
+      - ./data:/data
+    depends_on:
+      - spark-master
+    networks:
+      - smart-city-network
+
+  # ==================== POSTGRESQL ====================
+  postgres:
+    image: postgres:15
+    container_name: postgres
+    environment:
+      POSTGRES_USER: traffic_user
+      POSTGRES_PASSWORD: traffic_password
+      POSTGRES_DB: traffic
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U traffic_user -d traffic"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - smart-city-network
+
+  # ==================== AIRFLOW ====================
+  airflow-webserver:
+    image: apache/airflow:2.8.0-python3.11
+    container_name: airflow-webserver
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://traffic_user:traffic_password@postgres/traffic
+      AIRFLOW__CORE__FERNET_KEY: 'UKMzEm3yIuFYEq1y3-2FxPNWSVwRASpahmQ9kQfEr8E='
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    ports:
+      - "8081:8080"
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/logs:/opt/airflow/logs
+      - ./spark:/opt/spark-jobs
+      - ./data:/data
+    depends_on:
+      - postgres
+    command: >
+      bash -c "airflow db migrate &&
+               airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@email.com || true &&
+               airflow webserver"
+    networks:
+      - smart-city-network
+
+  airflow-scheduler:
+    image: apache/airflow:2.8.0-python3.11
+    container_name: airflow-scheduler
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://traffic_user:traffic_password@postgres/traffic
+      AIRFLOW__CORE__FERNET_KEY: 'UKMzEm3yIuFYEq1y3-2FxPNWSVwRASpahmQ9kQfEr8E='
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/logs:/opt/airflow/logs
+      - ./spark:/opt/spark-jobs
+      - ./data:/data
+    depends_on:
+      - postgres
+      - airflow-webserver
+    command: airflow scheduler
+    networks:
+      - smart-city-network
+
+  # ==================== GRAFANA ====================
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_INSTALL_PLUGINS: ""
+    volumes:
+      - ./grafana/dashboards:/var/lib/grafana/dashboards
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    depends_on:
+      - postgres
+    networks:
+      - smart-city-network
+
+# ==================== NETWORKS ====================
+networks:
+  smart-city-network:
+    driver: bridge
+
+# ==================== VOLUMES ====================
+volumes:
+  kafka-data:
+    driver: local
+  postgres-data:
+    driver: local
