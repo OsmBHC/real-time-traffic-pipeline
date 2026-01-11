@@ -1,31 +1,27 @@
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, current_timestamp, to_timestamp
+from pyspark.sql.functions import col, current_timestamp
+from pyspark.sql.types import StructType, StructField, StringType, DoubleType, IntegerType, TimestampType
+from pyspark.errors import AnalysisException
 import sys
 
 def main():
-    """
-    Étape 6 - Préparation des données pour Grafana
-    Exporte les données analytics depuis HDFS (Parquet) vers PostgreSQL
-    pour permettre la visualisation dans Grafana.
-    """
-    
-    # 1. Initialisation de la SparkSession avec support JDBC
-    # Utilisation du JAR PostgreSQL local au lieu de téléchargement Maven
     postgresql_jar_path = "/opt/spark-jobs/jars/postgresql-42.7.1.jar"
     
     spark = SparkSession.builder \
-        .appName("AnalyticsToPostgreSQL") \
+        .appName("AnalyticsToPostgreSQLBatch") \
         .master("local[*]") \
         .config("spark.jars", postgresql_jar_path) \
         .getOrCreate()
     
     spark.sparkContext.setLogLevel("WARN")
+
+    spark.conf.set("spark.sql.files.ignoreMissingFiles", "true")
+    spark.conf.set("spark.sql.files.ignoreCorruptFiles", "true")
     
     print("=" * 80)
     print("ÉTAPE 6 : EXPORT VERS POSTGRESQL POUR GRAFANA")
     print("=" * 80)
     
-    # 2. Configuration PostgreSQL
     postgres_host = "postgres"
     postgres_port = "5432"
     postgres_db = "traffic"
@@ -39,35 +35,65 @@ def main():
         "driver": "org.postgresql.Driver"
     }
     
-    # 3. Lecture des données analytics depuis HDFS
     analytics_base_path = "hdfs://namenode:8020/data/analytics/traffic"
-    
-    print(f"\n>>> Lecture des données analytics depuis : {analytics_base_path}")
-    
-    try:
-        # Lecture des tables analytics
-        traffic_by_zone_df = spark.read.parquet(f"{analytics_base_path}/traffic_by_zone")
-        speed_by_road_df = spark.read.parquet(f"{analytics_base_path}/speed_by_road")
-        congestion_alerts_df = spark.read.parquet(f"{analytics_base_path}/congestion_alerts")
-        mobility_summary_df = spark.read.parquet(f"{analytics_base_path}/mobility_summary")
-        
-        print(">>> Données analytics chargées avec succès")
-        print(f"   - Traffic par zone : {traffic_by_zone_df.count()} lignes")
-        print(f"   - Vitesse par route : {speed_by_road_df.count()} lignes")
-        print(f"   - Alertes de congestion : {congestion_alerts_df.count()} lignes")
-        print(f"   - Vue consolidée : {mobility_summary_df.count()} lignes")
-        
-    except Exception as e:
-        print(f"ERREUR lors de la lecture des données analytics : {e}")
-        import traceback
-        traceback.print_exc()
+
+    # Define schemas
+    traffic_schema = StructType([
+        StructField("zone", StringType()),
+        StructField("vehicle_count_avg", DoubleType()),
+        StructField("occupancy_rate_avg", DoubleType()),
+        StructField("traffic_level", StringType()),
+        StructField("processed_date", TimestampType())
+    ])
+
+    speed_schema = StructType([
+        StructField("road_id", StringType()),
+        StructField("road_type", StringType()),
+        StructField("speed_avg_kmh", DoubleType()),
+        StructField("speed_category", StringType()),
+        StructField("processed_date", TimestampType())
+    ])
+
+    congestion_schema = StructType([
+        StructField("zone", StringType()),
+        StructField("congestion_rate_pct", DoubleType()),
+        StructField("measurements_count", IntegerType()),
+        StructField("status", StringType()),
+        StructField("congestion_priority", StringType()),
+        StructField("processed_date", TimestampType())
+    ])
+
+    summary_schema = StructType([
+        StructField("zone", StringType()),
+        StructField("vehicle_count_avg", DoubleType()),
+        StructField("occupancy_rate_avg", DoubleType()),
+        StructField("traffic_level", StringType()),
+        StructField("congestion_rate_pct", DoubleType()),
+        StructField("congestion_priority", StringType()),
+        StructField("alert_status", StringType()),
+        StructField("processed_date", TimestampType())
+    ])
+
+    print(f"\n>>> Export batch vers PostgreSQL depuis : {analytics_base_path}")
+
+    def safe_read_parquet(path, schema):
+        try:
+            return spark.read.option("ignoreMissingFiles", "true").parquet(path)
+        except AnalysisException as e:
+            if "PATH_NOT_FOUND" in str(e) or "UNABLE_TO_INFER_SCHEMA" in str(e):
+                return spark.createDataFrame([], schema)
+            raise
+
+    traffic_by_zone_df = safe_read_parquet(f"{analytics_base_path}/traffic_by_zone", traffic_schema)
+    speed_by_road_df = safe_read_parquet(f"{analytics_base_path}/speed_by_road", speed_schema)
+    congestion_alerts_df = safe_read_parquet(f"{analytics_base_path}/congestion_alerts", congestion_schema)
+    mobility_summary_df = safe_read_parquet(f"{analytics_base_path}/mobility_summary", summary_schema)
+
+    if all(df.rdd.isEmpty() for df in [traffic_by_zone_df, speed_by_road_df, congestion_alerts_df, mobility_summary_df]):
+        print("No data to export")
         spark.stop()
         return
-    
-    # 4. Préparation des données pour PostgreSQL
-    print("\n>>> Préparation des données pour PostgreSQL...")
-    
-    # A. Trafic par zone
+
     traffic_for_grafana = traffic_by_zone_df \
         .withColumn("timestamp", current_timestamp()) \
         .select(
@@ -77,8 +103,7 @@ def main():
             col("traffic_level"),
             col("timestamp")
         )
-    
-    # B. Vitesse par route
+
     speed_for_grafana = speed_by_road_df \
         .withColumn("timestamp", current_timestamp()) \
         .select(
@@ -88,8 +113,7 @@ def main():
             col("speed_category"),
             col("timestamp")
         )
-    
-    # C. Congestion
+
     congestion_for_grafana = congestion_alerts_df \
         .withColumn("timestamp", current_timestamp()) \
         .select(
@@ -100,8 +124,7 @@ def main():
             col("congestion_priority"),
             col("timestamp")
         )
-    
-    # D. Vue consolidée
+
     summary_for_grafana = mobility_summary_df \
         .withColumn("timestamp", current_timestamp()) \
         .select(
@@ -114,73 +137,49 @@ def main():
             col("alert_status"),
             col("timestamp")
         )
-    
-    # 5. Écriture dans PostgreSQL (mode append pour l'historique)
-    print("\n>>> Écriture des données dans PostgreSQL...")
-    
+
     try:
-        # A. Trafic par zone
-        print("   → Export: traffic_by_zone")
         traffic_for_grafana.write \
             .mode("overwrite") \
             .option("truncate", "true") \
             .jdbc(jdbc_url, "traffic_by_zone", properties=properties)
-        print("     ✓ Table traffic_by_zone mise à jour")
-        
-        # B. Vitesse par route
-        print("   → Export: speed_by_road")
+
+        traffic_for_grafana.write \
+            .mode("append") \
+            .jdbc(jdbc_url, "traffic_by_zone_ts", properties=properties)
+
         speed_for_grafana.write \
             .mode("overwrite") \
             .option("truncate", "true") \
             .jdbc(jdbc_url, "speed_by_road", properties=properties)
-        print("     ✓ Table speed_by_road mise à jour")
-        
-        # C. Congestion
-        print("   → Export: congestion_alerts")
+
+        speed_for_grafana.write \
+            .mode("append") \
+            .jdbc(jdbc_url, "speed_by_road_ts", properties=properties)
+
         congestion_for_grafana.write \
             .mode("overwrite") \
             .option("truncate", "true") \
             .jdbc(jdbc_url, "congestion_alerts", properties=properties)
-        print("     ✓ Table congestion_alerts mise à jour")
-        
-        # D. Vue consolidée
-        print("   → Export: mobility_summary")
+
+        congestion_for_grafana.write \
+            .mode("append") \
+            .jdbc(jdbc_url, "congestion_alerts_ts", properties=properties)
+
         summary_for_grafana.write \
             .mode("overwrite") \
             .option("truncate", "true") \
             .jdbc(jdbc_url, "mobility_summary", properties=properties)
-        print("     ✓ Table mobility_summary mise à jour")
-        
+
+        summary_for_grafana.write \
+            .mode("append") \
+            .jdbc(jdbc_url, "mobility_summary_ts", properties=properties)
+
+        print("✓ PostgreSQL mis à jour")
     except Exception as e:
-        print(f"ERREUR lors de l'export vers PostgreSQL : {e}")
-        print("\nAssurez-vous que :")
-        print("  1. PostgreSQL est démarré et accessible")
-        print("  2. Les tables existent (elles seront créées automatiquement)")
-        print("  3. Le driver PostgreSQL est disponible")
-        import traceback
-        traceback.print_exc()
-        spark.stop()
-        return
-    
-    # 6. Vérification
-    print("\n>>> Vérification des données dans PostgreSQL...")
-    
-    try:
-        # Vérification des tables
-        test_df = spark.read.jdbc(jdbc_url, "traffic_by_zone", properties=properties)
-        print(f"   ✓ Traffic par zone : {test_df.count()} lignes")
-        print("\n   Aperçu des données :")
-        test_df.show(5, truncate=False)
-        
-    except Exception as e:
-        print(f"   ✗ Erreur lors de la vérification : {e}")
-    
-    print("\n>>> Export terminé avec succès !")
-    print(">>> Les données sont maintenant disponibles dans PostgreSQL pour Grafana")
-    print("=" * 80)
-    
+        print(f"ERREUR export PostgreSQL : {e}")
+
     spark.stop()
 
 if __name__ == "__main__":
     main()
-

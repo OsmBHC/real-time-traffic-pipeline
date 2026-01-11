@@ -9,7 +9,7 @@ from kafka import KafkaProducer
 KAFKA_BOOTSTRAP_SERVERS = ['localhost:9094']
 KAFKA_TOPIC = 'traffic-events'
 
-ZONES = ['Centre Ville', 'Zone Industrielle', 'Quartier Residentiel', 'Aeroport']
+ZONES = ['Centre Ville', 'Zone Industrielle', 'Quartier Residentiel', 'Aeroport', 'Quartier Commercial']
 ROAD_TYPES = {
     'Autoroute': {'max_speed': 130, 'capacity': 100},
     'Avenue': {'max_speed': 60, 'capacity': 50},
@@ -109,11 +109,11 @@ def main():
         print(f"Erreur de connexion Kafka : {e}")
         return
 
-    # Initialisation des capteurs (1 capteur par route pour simplifier, distribués dans les zones)
+    # Initialisation des capteurs (au moins 1 capteur par zone)
     sensors = []
-    for road in ROADS:
-        zone = random.choice(ZONES)
-        sensor = TrafficSensor(road['id'], road['type'], zone)
+    for i, zone in enumerate(ZONES):
+        road = ROADS[i % len(ROADS)]
+        sensor = TrafficSensor(road["id"], road["type"], zone)
         sensors.append(sensor)
         print(f"Capteur initialisé: {sensor.sensor_id} sur {road['id']} ({zone})")
 

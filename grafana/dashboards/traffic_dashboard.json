@@ -163,27 +163,10 @@
           "format": "table",
           "rawQuery": true,
           "rawSql": "SELECT zone, ROUND(vehicle_count_avg::numeric, 2) as vehicules_moyens, ROUND(occupancy_rate_avg::numeric, 2) as taux_occupation, traffic_level FROM traffic_by_zone ORDER BY vehicle_count_avg DESC;",
-          "refId": "A",
-          "sql": {
-            "columns": [
-              {
-                "parameters": [],
-                "type": "function"
-              }
-            ],
-            "groupBy": [
-              {
-                "property": {
-                  "type": "string"
-                },
-                "type": "groupBy"
-              }
-            ],
-            "limit": 50
-          }
+          "refId": "A"
         }
       ],
-      "title": "Trafic par Zone",
+      "title": "Trafic par Zone (état actuel)",
       "type": "table"
     },
     {
@@ -255,7 +238,7 @@
           "showLegend": true
         },
         "tooltip": {
-          "mode": "single",
+          "mode": "multi",
           "sort": "none"
         }
       },
@@ -269,284 +252,12 @@
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT NOW() as time, road_type, ROUND(AVG(speed_avg_kmh)::numeric, 2) as vitesse_moyenne FROM speed_by_road GROUP BY road_type ORDER BY vitesse_moyenne DESC;",
-          "refId": "A",
-          "timeColumn": "time",
-          "timeColumnType": "timestamp",
-          "group": ["road_type"],
-          "metricColumn": "vitesse_moyenne"
+          "rawSql": "SELECT timestamp AS time, road_type, speed_avg_kmh AS vitesse_moyenne FROM speed_by_road_ts ORDER BY time;",
+          "refId": "A"
         }
       ],
-      "title": "Vitesse Moyenne par Type de Route",
+      "title": "Évolution Vitesse Moyenne par Type de Route",
       "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "postgres",
-        "uid": "PostgreSQL"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "max": 100,
-          "min": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 30
-              },
-              {
-                "color": "orange",
-                "value": 60
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "percent"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 8
-      },
-      "id": 3,
-      "options": {
-        "displayMode": "gradient",
-        "minVizHeight": 10,
-        "minVizWidth": 0,
-        "orientation": "horizontal",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "showUnfilled": true,
-        "valueMode": "color"
-      },
-      "pluginVersion": "10.0.0",
-      "targets": [
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "PostgreSQL"
-          },
-          "editorMode": "code",
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "SELECT zone, ROUND(occupancy_rate_avg::numeric, 2) as congestion FROM traffic_by_zone ORDER BY congestion DESC;",
-          "refId": "A"
-        }
-      ],
-      "title": "Taux de Congestion par Zone",
-      "type": "bargauge"
-    },
-    {
-      "datasource": {
-        "type": "postgres",
-        "uid": "PostgreSQL"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "custom": {
-            "align": "auto",
-            "cellOptions": {
-              "type": "auto"
-            },
-            "inspect": false
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 50
-              },
-              {
-                "color": "orange",
-                "value": 70
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "taux_congestion"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "percent"
-              },
-              {
-                "id": "thresholds",
-                "value": {
-                  "mode": "absolute",
-                  "steps": [
-                    {
-                      "color": "green",
-                      "value": null
-                    },
-                    {
-                      "color": "yellow",
-                      "value": 50
-                    },
-                    {
-                      "color": "orange",
-                      "value": 70
-                    },
-                    {
-                      "color": "red",
-                      "value": 80
-                    }
-                  ]
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "congestion_priority"
-            },
-            "properties": [
-              {
-                "id": "custom.cellOptions",
-                "value": {
-                  "type": "color-text"
-                }
-              },
-              {
-                "id": "mappings",
-                "value": [
-                  {
-                    "options": {
-                      "URGENTE": {
-                        "color": "red",
-                        "text": "URGENTE"
-                      },
-                      "HAUTE": {
-                        "color": "orange",
-                        "text": "HAUTE"
-                      },
-                      "MOYENNE": {
-                        "color": "yellow",
-                        "text": "MOYENNE"
-                      }
-                    },
-                    "type": "value"
-                  }
-                ]
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "status"
-            },
-            "properties": [
-              {
-                "id": "custom.cellOptions",
-                "value": {
-                  "type": "color-text"
-                }
-              },
-              {
-                "id": "mappings",
-                "value": [
-                  {
-                    "options": {
-                      "CRITICAL CONGESTION": {
-                        "color": "red",
-                        "text": "CRITICAL CONGESTION"
-                      },
-                      "HIGH CONGESTION": {
-                        "color": "orange",
-                        "text": "HIGH CONGESTION"
-                      },
-                      "MODERATE CONGESTION": {
-                        "color": "yellow",
-                        "text": "MODERATE CONGESTION"
-                      }
-                    },
-                    "type": "value"
-                  }
-                ]
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 8
-      },
-      "id": 4,
-      "options": {
-        "cellHeight": "sm",
-        "footer": {
-          "countRows": false,
-          "fields": "",
-          "reducer": ["sum"],
-          "show": false
-        },
-        "showHeader": true,
-        "sortBy": [
-          {
-            "desc": true,
-            "displayName": "taux_congestion"
-          }
-        ]
-      },
-      "pluginVersion": "10.0.0",
-      "targets": [
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "PostgreSQL"
-          },
-          "editorMode": "code",
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "SELECT zone, ROUND(congestion_rate_pct::numeric, 2) as taux_congestion, congestion_priority, status FROM congestion_alerts ORDER BY congestion_rate_pct DESC;",
-          "refId": "A"
-        }
-      ],
-      "title": "Zones Critiques - Alertes de Congestion",
-      "type": "table"
     },
     {
       "datasource": {
@@ -565,7 +276,7 @@
             "axisPlacement": "auto",
             "barAlignment": 0,
             "drawStyle": "line",
-            "fillOpacity": 10,
+            "fillOpacity": 20,
             "gradientMode": "none",
             "hideFrom": {
               "tooltip": false,
@@ -604,19 +315,16 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 24,
+        "w": 12,
         "x": 0,
-        "y": 16
+        "y": 8
       },
-      "id": 5,
+      "id": 3,
       "options": {
         "legend": {
-          "calcs": [
-            "mean",
-            "max"
-          ],
-          "displayMode": "table",
-          "placement": "right",
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
           "showLegend": true
         },
         "tooltip": {
@@ -634,30 +342,101 @@
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT timestamp as time, zone, vehicle_count_avg FROM traffic_by_zone ORDER BY timestamp;",
-          "refId": "A",
-          "sql": {
-            "columns": [
-              {
-                "parameters": [],
-                "type": "function"
-              }
-            ],
-            "groupBy": [
-              {
-                "property": {
-                  "type": "string"
-                },
-                "type": "groupBy"
-              }
-            ],
-            "limit": 50
-          },
-          "timeColumn": "time",
-          "timeColumnType": "timestamp"
+          "rawSql": "SELECT timestamp AS time, zone, vehicle_count_avg AS vehicules_moyens FROM traffic_by_zone_ts ORDER BY time;",
+          "refId": "A"
         }
       ],
-      "title": "Évolution du Trafic par Zone",
+      "title": "Évolution du Trafic par Zone (Véhicules Moyens)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "PostgreSQL"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "gradientMode": "none",
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
+      "id": 4,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "PostgreSQL"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT timestamp AS time, zone, occupancy_rate_avg AS taux_occupation FROM traffic_by_zone_ts ORDER BY time;",
+          "refId": "A"
+        }
+      ],
+      "title": "Évolution du Taux d'Occupation par Zone",
       "type": "timeseries"
     },
     {
@@ -960,8 +739,8 @@
   },
   "timepicker": {},
   "timezone": "",
-  "title": "Dashboard Trafic Urbain - Smart City",
+  "title": "Dashboard Trafic Urbain - Smart City (Real-time)",
   "uid": "traffic-smart-city",
-  "version": 1,
+  "version": 2,
   "weekStart": ""
 }

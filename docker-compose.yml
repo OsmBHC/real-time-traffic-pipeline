@@ -1,7 +1,7 @@
 services:
   # ==================== KAFKA ====================
   broker:
-    image: apache/kafka:latest
+    image: confluentinc/cp-kafka:latest
     container_name: broker
     hostname: broker
     ports:
@@ -85,8 +85,8 @@ services:
     container_name: spark-worker
     command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.worker.Worker", "spark://spark-master:7077"]
     environment:
-      SPARK_WORKER_CORES: 2
-      SPARK_WORKER_MEMORY: 2G
+      SPARK_WORKER_CORES: 4
+      SPARK_WORKER_MEMORY: 4G
     volumes:
       - ./spark:/opt/spark-jobs
       - ./data:/data
@@ -119,11 +119,13 @@ services:
   airflow-webserver:
     image: apache/airflow:2.8.0-python3.11
     container_name: airflow-webserver
+    user: "0:0"
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://traffic_user:traffic_password@postgres/traffic
       AIRFLOW__CORE__FERNET_KEY: 'UKMzEm3yIuFYEq1y3-2FxPNWSVwRASpahmQ9kQfEr8E='
       AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+      PIP_ADDITIONAL_REQUIREMENTS: "apache-airflow-providers-docker==3.10.0"
     ports:
       - "8081:8080"
     volumes:
@@ -131,6 +133,7 @@ services:
       - ./airflow/logs:/opt/airflow/logs
       - ./spark:/opt/spark-jobs
       - ./data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       - postgres
     command: >
@@ -143,16 +146,19 @@ services:
   airflow-scheduler:
     image: apache/airflow:2.8.0-python3.11
     container_name: airflow-scheduler
+    user: "0:0"
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://traffic_user:traffic_password@postgres/traffic
       AIRFLOW__CORE__FERNET_KEY: 'UKMzEm3yIuFYEq1y3-2FxPNWSVwRASpahmQ9kQfEr8E='
       AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+      PIP_ADDITIONAL_REQUIREMENTS: "apache-airflow-providers-docker==3.10.0"
     volumes:
       - ./airflow/dags:/opt/airflow/dags
       - ./airflow/logs:/opt/airflow/logs
       - ./spark:/opt/spark-jobs
       - ./data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       - postgres
       - airflow-webserver
